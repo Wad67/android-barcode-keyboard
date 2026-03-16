@@ -95,7 +95,7 @@ class BarcodeInputService : InputMethodService(), LifecycleOwner {
             cameraProvider.unbindAll()
 
             val preview = Preview.Builder().build().also {
-                it.surfaceProvider = previewView?.surfaceProvider
+                it.setSurfaceProvider(previewView?.getSurfaceProvider())
             }
 
             val scanner = BarcodeScanning.getClient()
