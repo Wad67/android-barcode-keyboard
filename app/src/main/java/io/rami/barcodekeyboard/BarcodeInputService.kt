@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
+import android.media.ToneGenerator
+import android.media.AudioManager
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Size
 import android.view.KeyEvent
 import android.view.View
@@ -19,9 +23,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BarcodeInputService : InputMethodService(), LifecycleOwner {
 
@@ -31,6 +35,8 @@ class BarcodeInputService : InputMethodService(), LifecycleOwner {
     private var lastText: String = ""
     private var lastTime: Long = 0
     private val analysisExecutor = Executors.newSingleThreadExecutor()
+    private val scanning = AtomicBoolean(false)
+    private val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
@@ -86,6 +92,23 @@ class BarcodeInputService : InputMethodService(), LifecycleOwner {
         super.onDestroy()
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         analysisExecutor.shutdown()
+        toneGenerator.release()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            scanning.set(true)
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            scanning.set(false)
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     private fun startCamera() {
@@ -106,6 +129,11 @@ class BarcodeInputService : InputMethodService(), LifecycleOwner {
                 .build()
 
             analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                if (!scanning.get()) {
+                    imageProxy.close()
+                    return@setAnalyzer
+                }
+
                 @androidx.camera.core.ExperimentalGetImage
                 val mediaImage = imageProxy.image
                 if (mediaImage != null) {
@@ -144,6 +172,13 @@ class BarcodeInputService : InputMethodService(), LifecycleOwner {
         }
         lastText = text
         lastTime = System.currentTimeMillis()
+
+        // Beep
+        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+
+        // Vibrate
+        val vibrator = getSystemService(Vibrator::class.java)
+        vibrator?.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
 
         val ic = currentInputConnection ?: return
         ic.commitText(text, 1)
