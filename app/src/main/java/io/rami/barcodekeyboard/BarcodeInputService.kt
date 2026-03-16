@@ -22,7 +22,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -121,7 +123,19 @@ class BarcodeInputService : InputMethodService(), LifecycleOwner {
                 it.setSurfaceProvider(previewView?.getSurfaceProvider())
             }
 
-            val scanner = BarcodeScanning.getClient()
+            val options = BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(
+                    Barcode.FORMAT_EAN_13,
+                    Barcode.FORMAT_EAN_8,
+                    Barcode.FORMAT_UPC_A,
+                    Barcode.FORMAT_UPC_E,
+                    Barcode.FORMAT_CODE_128,
+                    Barcode.FORMAT_CODE_39,
+                    Barcode.FORMAT_CODE_93,
+                    Barcode.FORMAT_ITF
+                )
+                .build()
+            val scanner = BarcodeScanning.getClient(options)
 
             val analysis = ImageAnalysis.Builder()
                 .setTargetResolution(Size(1280, 720))
@@ -167,6 +181,10 @@ class BarcodeInputService : InputMethodService(), LifecycleOwner {
     }
 
     private fun handleBarcode(text: String) {
+        // Only accept numeric barcodes (SKUs) - reject URLs, text, etc.
+        if (!text.matches(Regex("^[0-9]+$"))) {
+            return
+        }
         if (text == lastText && System.currentTimeMillis() - lastTime < 3000) {
             return
         }
